@@ -25,6 +25,9 @@ T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger(__name__)
 
+# ``None`` is a valid decoded event, so it cannot mark the end of the stream.
+_END_OF_STREAM: Any = object()
+
 
 @dataclass
 class UsageMetadata:
@@ -445,10 +448,9 @@ class SageMakerAIModel(OpenAIModel):
                 text_content_started = False
                 reasoning_content_started = False
 
-                # Pulling one event at a time keeps the read on a worker thread while a read
-                # failure propagates here, before any closing event claims the stream ended.
+                # Pulling one event at a time keeps the read on a worker thread.
                 events = _parse_event_stream(response["Body"])
-                while (content := await asyncio.to_thread(next, events, None)) is not None:
+                while (content := await asyncio.to_thread(next, events, _END_OF_STREAM)) is not _END_OF_STREAM:
                     choices = content.get("choices")
                     if not choices:
                         if usage := content.get("usage"):
